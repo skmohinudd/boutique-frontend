@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+<title id="title">Hand Cream</title>
+<desc id="desc">Beauty product illustration for Hand Cream</desc>
+<rect width="800" height="600" fill="#fae8ff"/>
+<circle cx="207" cy="234" r="61" fill="#a21caf" opacity=".12"/>
+<circle cx="513" cy="389" r="86" fill="#a21caf" opacity=".08"/>
+<rect x="155" y="95" width="490" height="360" rx="38" fill="#fff" stroke="#a21caf" stroke-width="8"/>
+<path d="M285 260h230l40 145H245l40-145Z" fill="#fae8ff" stroke="#a21caf" stroke-width="12" stroke-linejoin="round"/>
+<path d="M330 276c0-65 32-105 70-105s70 40 70 105" fill="none" stroke="#a21caf" stroke-width="12" stroke-linecap="round"/>
+<circle cx="360" cy="342" r="15" fill="#a21caf"/>
+<circle cx="440" cy="342" r="15" fill="#a21caf"/>
+<text x="400" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#a21caf">Hand Cream</text>
+<text x="400" y="545" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="600" fill="#475569">Beauty - BEA-0111</text>
+</svg>
