@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+<title id="title">Mixed Seeds</title>
+<desc id="desc">Grocery product illustration for Mixed Seeds</desc>
+<rect width="800" height="600" fill="#ecfccb"/>
+<circle cx="290" cy="145" r="64" fill="#4d7c0f" opacity=".12"/>
+<circle cx="500" cy="330" r="89" fill="#4d7c0f" opacity=".08"/>
+<rect x="155" y="95" width="490" height="360" rx="38" fill="#fff" stroke="#4d7c0f" stroke-width="8"/>
+<path d="M285 260h230l40 145H245l40-145Z" fill="#ecfccb" stroke="#4d7c0f" stroke-width="12" stroke-linejoin="round"/>
+<path d="M330 276c0-65 32-105 70-105s70 40 70 105" fill="none" stroke="#4d7c0f" stroke-width="12" stroke-linecap="round"/>
+<circle cx="360" cy="342" r="15" fill="#4d7c0f"/>
+<circle cx="440" cy="342" r="15" fill="#4d7c0f"/>
+<text x="400" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#4d7c0f">Mixed Seeds</text>
+<text x="400" y="545" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="600" fill="#475569">Grocery - GRO-0190</text>
+</svg>

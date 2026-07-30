@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+<title id="title">Pleated Skirt</title>
+<desc id="desc">Fashion product illustration for Pleated Skirt</desc>
+<rect width="800" height="600" fill="#fce7f3"/>
+<circle cx="236" cy="207" r="85" fill="#be185d" opacity=".12"/>
+<circle cx="604" cy="372" r="110" fill="#be185d" opacity=".08"/>
+<rect x="155" y="95" width="490" height="360" rx="38" fill="#fff" stroke="#be185d" stroke-width="8"/>
+<path d="M285 260h230l40 145H245l40-145Z" fill="#fce7f3" stroke="#be185d" stroke-width="12" stroke-linejoin="round"/>
+<path d="M330 276c0-65 32-105 70-105s70 40 70 105" fill="none" stroke="#be185d" stroke-width="12" stroke-linecap="round"/>
+<circle cx="360" cy="342" r="15" fill="#be185d"/>
+<circle cx="440" cy="342" r="15" fill="#be185d"/>
+<text x="400" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#be185d">Pleated Skirt</text>
+<text x="400" y="545" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="600" fill="#475569">Fashion - FAS-0028</text>
+</svg>

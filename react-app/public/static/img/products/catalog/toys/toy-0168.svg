@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-labelledby="title desc">
+<title id="title">Science Experiment Set</title>
+<desc id="desc">Toys product illustration for Science Experiment Set</desc>
+<rect width="800" height="600" fill="#fee2e2"/>
+<circle cx="276" cy="207" r="75" fill="#b91c1c" opacity=".12"/>
+<circle cx="604" cy="392" r="100" fill="#b91c1c" opacity=".08"/>
+<rect x="155" y="95" width="490" height="360" rx="38" fill="#fff" stroke="#b91c1c" stroke-width="8"/>
+<path d="M285 260h230l40 145H245l40-145Z" fill="#fee2e2" stroke="#b91c1c" stroke-width="12" stroke-linejoin="round"/>
+<path d="M330 276c0-65 32-105 70-105s70 40 70 105" fill="none" stroke="#b91c1c" stroke-width="12" stroke-linecap="round"/>
+<circle cx="360" cy="342" r="15" fill="#b91c1c"/>
+<circle cx="440" cy="342" r="15" fill="#b91c1c"/>
+<text x="400" y="500" text-anchor="middle" font-family="Arial, sans-serif" font-size="34" font-weight="700" fill="#b91c1c">Science Experiment Set</text>
+<text x="400" y="545" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="600" fill="#475569">Toys - TOY-0168</text>
+</svg>
