@@ -1,6 +1,19 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+function proxy(targetEnvironmentVariable, fallbackTarget, prefix) {
+  return {
+    target:
+      process.env[targetEnvironmentVariable] ||
+      fallbackTarget,
+
+    changeOrigin: true,
+
+    rewrite: (path) =>
+      path.replace(new RegExp(`^${prefix}`), ""),
+  };
+}
+
 export default defineConfig({
   plugins: [react()],
 
@@ -9,21 +22,35 @@ export default defineConfig({
     port: 5173,
 
     proxy: {
-      "/product-api": {
-        target: "http://127.0.0.1:8080",
-        changeOrigin: true,
+      "/product-api": proxy(
+        "VITE_PRODUCT_SERVICE_TARGET",
+        "http://localhost:8080",
+        "/product-api",
+      ),
 
-        rewrite: (path) =>
-          path.replace(/^\/product-api/, ""),
-      },
+      "/inventory-api": proxy(
+        "VITE_INVENTORY_SERVICE_TARGET",
+        "http://localhost:8081",
+        "/inventory-api",
+      ),
 
-      "/inventory-api": {
-        target: "http://127.0.0.1:8081",
-        changeOrigin: true,
+      "/user-api": proxy(
+        "VITE_USER_SERVICE_TARGET",
+        "http://localhost:8082",
+        "/user-api",
+      ),
 
-        rewrite: (path) =>
-          path.replace(/^\/inventory-api/, ""),
-      },
+      "/cart-api": proxy(
+        "VITE_CART_SERVICE_TARGET",
+        "http://localhost:8083",
+        "/cart-api",
+      ),
+
+      "/checkout-api": proxy(
+        "VITE_CHECKOUT_SERVICE_TARGET",
+        "http://localhost:8086",
+        "/checkout-api",
+      ),
     },
   },
 });

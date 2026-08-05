@@ -1,17 +1,29 @@
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "react-toastify";
 
 import {
     formatPrice,
     PRODUCT_PLACEHOLDER_IMAGE,
     resolveImageUrl,
 } from "../components/product/ProductCard";
+import { environment } from "../config/environment";
 import {
     getCartTotal,
     useCartStore,
 } from "../features/cart/cartStore";
+import {
+    synchronizeBackendCart,
+} from "../api/cartApi";
+import {
+    createCheckout,
+} from "../api/checkoutApi";
 
 function CartPage() {
+    const [isCheckingOut, setIsCheckingOut] = useState(false);
+    const [checkoutResult, setCheckoutResult] = useState(null);
+
     const items = useCartStore((state) => state.items);
     const increaseQuantity = useCartStore(
         (state) => state.increaseQuantity,
@@ -29,7 +41,52 @@ function CartPage() {
     const total = getCartTotal(items);
     const currency = items[0]?.currency || "USD";
 
-    if (!items.length) {
+    async function handleCheckout() {
+        if (!items.length || isCheckingOut) {
+            return;
+        }
+
+        setIsCheckingOut(true);
+        setCheckoutResult(null);
+
+        try {
+            await synchronizeBackendCart(
+                environment.development.userId,
+                items,
+            );
+
+            const result = await createCheckout({
+                userId: environment.development.userId,
+                cardLast4:
+                    environment.development.cardLast4,
+            });
+
+            setCheckoutResult(result);
+
+            if (result.status === "CONFIRMED") {
+                clearCart();
+                toast.success(
+                    `Order ${result.orderId} confirmed`,
+                );
+            } else {
+                toast.error(
+                    `Checkout failed: ${result.status}`,
+                );
+            }
+        } catch (error) {
+            const detail =
+                error.data?.detail ||
+                error.data?.message ||
+                error.message ||
+                "Checkout failed.";
+
+            toast.error(detail);
+        } finally {
+            setIsCheckingOut(false);
+        }
+    }
+
+    if (!items.length && !checkoutResult) {
         return (
             <main className="page-container cart-page">
                 <div className="empty-state">
@@ -41,6 +98,28 @@ function CartPage() {
 
                     <Link className="primary-link" to="/">
                         Browse products
+                    </Link>
+                </div>
+            </main>
+        );
+    }
+
+    if (checkoutResult?.status === "CONFIRMED") {
+        return (
+            <main className="page-container cart-page">
+                <div className="empty-state">
+                    <h1>Order confirmed</h1>
+
+                    <p>
+                        Order ID: {checkoutResult.orderId}
+                    </p>
+
+                    <p>
+                        Payment ID: {checkoutResult.paymentId}
+                    </p>
+
+                    <Link className="primary-link" to="/">
+                        Continue shopping
                     </Link>
                 </div>
             </main>
@@ -61,6 +140,7 @@ function CartPage() {
                 <button
                     className="cart-page__clear"
                     type="button"
+                    disabled={isCheckingOut}
                     onClick={clearCart}
                 >
                     Clear cart
@@ -103,6 +183,7 @@ function CartPage() {
                                 <div className="cart-item__controls">
                                     <button
                                         type="button"
+                                        disabled={isCheckingOut}
                                         aria-label={`Decrease ${item.name}`}
                                         onClick={() =>
                                             decreaseQuantity(item.productId)
@@ -117,6 +198,7 @@ function CartPage() {
                                         type="button"
                                         aria-label={`Increase ${item.name}`}
                                         disabled={
+                                            isCheckingOut ||
                                             item.quantity >=
                                             item.availableQuantity
                                         }
@@ -140,6 +222,7 @@ function CartPage() {
                                 <button
                                     className="cart-item__remove"
                                     type="button"
+                                    disabled={isCheckingOut}
                                     aria-label={`Remove ${item.name}`}
                                     onClick={() =>
                                         removeItem(item.productId)
@@ -164,12 +247,18 @@ function CartPage() {
                     </div>
 
                     <p>
-                        Checkout backend integration will be added when the
-                        Checkout Service is built.
+                        Local development checkout uses the configured
+                        demo user and a simulated payment authorization.
                     </p>
 
-                    <button type="button" disabled>
-                        Checkout unavailable
+                    <button
+                        type="button"
+                        disabled={isCheckingOut || !items.length}
+                        onClick={handleCheckout}
+                    >
+                        {isCheckingOut
+                            ? "Processing checkout..."
+                            : "Checkout"}
                     </button>
                 </aside>
             </div>

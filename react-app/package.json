@@ -15,7 +15,7 @@
     "axios": "^1.19.0",
     "clsx": "^2.1.1",
     "dayjs": "^1.11.21",
-    "lucide-react": "^1.27.0",
+    "lucide-react": "^1.28.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-hook-form": "^7.83.0",
