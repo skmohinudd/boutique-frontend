@@ -9,6 +9,7 @@ import {
     resolveImageUrl,
 } from "../components/product/ProductCard";
 import { environment } from "../config/environment";
+import { getOrCreateLocalUserId, resetLocalSession } from "../features/session/localSession";
 import {
     getCartTotal,
     useCartStore,
@@ -50,13 +51,14 @@ function CartPage() {
         setCheckoutResult(null);
 
         try {
+            const userId = await getOrCreateLocalUserId();
             await synchronizeBackendCart(
-                environment.development.userId,
+                userId,
                 items,
             );
 
             const result = await createCheckout({
-                userId: environment.development.userId,
+                userId: userId,
                 cardLast4:
                     environment.development.cardLast4,
             });
@@ -260,6 +262,7 @@ function CartPage() {
                             ? "Processing checkout..."
                             : "Checkout"}
                     </button>
+                    <Link className="payment-route-link" to="/payment">Open secure demo payment</Link>
                 </aside>
             </div>
         </main>
