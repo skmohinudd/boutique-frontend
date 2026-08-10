@@ -42,8 +42,9 @@ jobs:
 
       - name: Verify build output
         working-directory: react-app
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           test -f dist/index.html
           test -d dist/assets
@@ -52,21 +53,22 @@ jobs:
           grep -oE 'assets/index-[^"]+\.(js|css)' dist/index.html || true
 
       - name: Debug GitHub identity
+        shell: bash
         run: |
           echo "Repository = $GITHUB_REPOSITORY"
           echo "Ref        = $GITHUB_REF"
           echo "Actor      = $GITHUB_ACTOR"
 
-      - name: Debug actual GitHub OIDC claims
+      - name: Print GitHub OIDC claims
         shell: bash
         run: |
           set -euo pipefail
 
           RESPONSE=$(curl -sSf \
-            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
             "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
 
-          TOKEN=$(echo "$RESPONSE" | python3 -c \
+          TOKEN=$(printf '%s' "$RESPONSE" | python3 -c \
             'import sys,json; print(json.load(sys.stdin)["value"])')
 
           export TOKEN
@@ -78,26 +80,26 @@ jobs:
 
           token = os.environ["TOKEN"]
 
-          payload = token.split(".")[1]
+          parts = token.split(".")
+          if len(parts) != 3:
+              raise SystemExit("Invalid JWT token format")
+
+          payload = parts[1]
           payload += "=" * (-len(payload) % 4)
 
           claims = json.loads(
-              base64.urlsafe_b64decode(payload)
+              base64.urlsafe_b64decode(payload.encode()).decode()
           )
 
           print("===== ACTUAL GITHUB OIDC CLAIMS =====")
-
-          for key in [
-              "iss",
-              "aud",
-              "sub",
-              "repository",
-              "repository_owner",
-              "ref",
-              "environment",
-              "job_workflow_ref"
-          ]:
-              print(f"{key}: {claims.get(key)}")
+          print("iss =", claims.get("iss"))
+          print("aud =", claims.get("aud"))
+          print("sub =", claims.get("sub"))
+          print("repository =", claims.get("repository"))
+          print("repository_owner =", claims.get("repository_owner"))
+          print("ref =", claims.get("ref"))
+          print("environment =", claims.get("environment"))
+          print("job_workflow_ref =", claims.get("job_workflow_ref"))
           PY
 
       - name: Authenticate to AWS using OIDC
@@ -107,12 +109,16 @@ jobs:
           aws-region: us-east-1
 
       - name: Verify AWS identity
-        run: aws sts get-caller-identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws sts get-caller-identity
 
       - name: Upload hashed assets
         working-directory: react-app
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           aws s3 sync dist/assets/ \
             s3://${S3_BUCKET}/assets/ \
@@ -121,8 +127,9 @@ jobs:
 
       - name: Upload static files
         working-directory: react-app
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           aws s3 sync dist/ \
             s3://${S3_BUCKET}/ \
@@ -131,8 +138,9 @@ jobs:
 
       - name: Upload index.html with no-cache
         working-directory: react-app
+        shell: bash
         run: |
-          set -e
+          set -euo pipefail
 
           aws s3 cp dist/index.html \
             s3://${S3_BUCKET}/index.html \
@@ -141,6 +149,7 @@ jobs:
 
       - name: Verify deployed index.html
         working-directory: react-app
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -162,6 +171,7 @@ jobs:
 
       - name: Verify JavaScript bundle exists in S3
         working-directory: react-app
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -174,6 +184,7 @@ jobs:
             --key "${JS_FILE}"
 
       - name: Invalidate CloudFront
+        shell: bash
         run: |
           set -euo pipefail
 
@@ -192,6 +203,7 @@ jobs:
           echo "CloudFront invalidation completed."
 
       - name: Verify website
+        shell: bash
         run: |
           set -euo pipefail
 
