@@ -58,7 +58,7 @@ jobs:
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: arn:aws:iam::663130434910:role/GitHubActions-BoutiqueFrontendDeploy
+          role-to-assume: arn:aws:iam::663130434910:role/BoutiqueFrontendDeployRole
           aws-region: us-east-1
 
       - name: Verify AWS identity
