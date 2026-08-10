@@ -43,6 +43,8 @@ jobs:
       - name: Verify build output
         working-directory: react-app
         run: |
+          set -e
+
           test -f dist/index.html
           test -d dist/assets
 
@@ -54,6 +56,49 @@ jobs:
           echo "Repository = $GITHUB_REPOSITORY"
           echo "Ref        = $GITHUB_REF"
           echo "Actor      = $GITHUB_ACTOR"
+
+      - name: Debug actual GitHub OIDC claims
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          RESPONSE=$(curl -sSf \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
+
+          TOKEN=$(echo "$RESPONSE" | python3 -c \
+            'import sys,json; print(json.load(sys.stdin)["value"])')
+
+          export TOKEN
+
+          python3 <<'PY'
+          import os
+          import json
+          import base64
+
+          token = os.environ["TOKEN"]
+
+          payload = token.split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+
+          claims = json.loads(
+              base64.urlsafe_b64decode(payload)
+          )
+
+          print("===== ACTUAL GITHUB OIDC CLAIMS =====")
+
+          for key in [
+              "iss",
+              "aud",
+              "sub",
+              "repository",
+              "repository_owner",
+              "ref",
+              "environment",
+              "job_workflow_ref"
+          ]:
+              print(f"{key}: {claims.get(key)}")
+          PY
 
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
@@ -67,6 +112,8 @@ jobs:
       - name: Upload hashed assets
         working-directory: react-app
         run: |
+          set -e
+
           aws s3 sync dist/assets/ \
             s3://${S3_BUCKET}/assets/ \
             --delete \
@@ -75,6 +122,8 @@ jobs:
       - name: Upload static files
         working-directory: react-app
         run: |
+          set -e
+
           aws s3 sync dist/ \
             s3://${S3_BUCKET}/ \
             --delete \
@@ -83,6 +132,8 @@ jobs:
       - name: Upload index.html with no-cache
         working-directory: react-app
         run: |
+          set -e
+
           aws s3 cp dist/index.html \
             s3://${S3_BUCKET}/index.html \
             --cache-control "no-cache,no-store,must-revalidate" \
@@ -91,6 +142,8 @@ jobs:
       - name: Verify deployed index.html
         working-directory: react-app
         run: |
+          set -euo pipefail
+
           LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
 
           REMOTE_JS=$(aws s3 cp s3://${S3_BUCKET}/index.html - \
@@ -101,12 +154,29 @@ jobs:
           echo "Remote bundle: $REMOTE_JS"
 
           if [ "$LOCAL_JS" != "$REMOTE_JS" ]; then
-            echo "ERROR: S3 is still serving a different frontend build."
+            echo "ERROR: S3 is serving a different frontend build."
             exit 1
           fi
 
+          echo "S3 deployment verification passed."
+
+      - name: Verify JavaScript bundle exists in S3
+        working-directory: react-app
+        run: |
+          set -euo pipefail
+
+          JS_FILE=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
+
+          echo "Checking S3 object: $JS_FILE"
+
+          aws s3api head-object \
+            --bucket "${S3_BUCKET}" \
+            --key "${JS_FILE}"
+
       - name: Invalidate CloudFront
         run: |
+          set -euo pipefail
+
           INVALIDATION_ID=$(aws cloudfront create-invalidation \
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --paths "/*" \
@@ -119,8 +189,12 @@ jobs:
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --id "${INVALIDATION_ID}"
 
+          echo "CloudFront invalidation completed."
+
       - name: Verify website
         run: |
+          set -euo pipefail
+
           STATUS=$(curl \
             -s \
             -o /tmp/site.html \
