@@ -15,7 +15,6 @@ env:
   AWS_REGION: us-east-1
   S3_BUCKET: boutique-dev-frontend
   CLOUDFRONT_DISTRIBUTION_ID: E3SF8B4MHWNVIT
-  APP_DIR: react-app
 
 jobs:
   deploy:
@@ -42,103 +41,49 @@ jobs:
 
       - name: Verify build output
         working-directory: react-app
-        shell: bash
         run: |
           set -euo pipefail
 
           test -f dist/index.html
           test -d dist/assets
 
-          echo "Generated bundles:"
+          echo "Build files:"
           grep -oE 'assets/index-[^"]+\.(js|css)' dist/index.html || true
-
-      - name: Debug GitHub identity
-        shell: bash
-        run: |
-          echo "Repository = $GITHUB_REPOSITORY"
-          echo "Ref        = $GITHUB_REF"
-          echo "Actor      = $GITHUB_ACTOR"
-
-      - name: Print GitHub OIDC claims
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          RESPONSE=$(curl -sSf \
-            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com")
-
-          TOKEN=$(printf '%s' "$RESPONSE" | python3 -c \
-            'import sys,json; print(json.load(sys.stdin)["value"])')
-
-          export TOKEN
-
-          python3 <<'PY'
-          import os
-          import json
-          import base64
-
-          token = os.environ["TOKEN"]
-
-          parts = token.split(".")
-          if len(parts) != 3:
-              raise SystemExit("Invalid JWT token format")
-
-          payload = parts[1]
-          payload += "=" * (-len(payload) % 4)
-
-          claims = json.loads(
-              base64.urlsafe_b64decode(payload.encode()).decode()
-          )
-
-          print("===== ACTUAL GITHUB OIDC CLAIMS =====")
-          print("iss =", claims.get("iss"))
-          print("aud =", claims.get("aud"))
-          print("sub =", claims.get("sub"))
-          print("repository =", claims.get("repository"))
-          print("repository_owner =", claims.get("repository_owner"))
-          print("ref =", claims.get("ref"))
-          print("environment =", claims.get("environment"))
-          print("job_workflow_ref =", claims.get("job_workflow_ref"))
-          PY
 
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: arn:aws:iam::663130434910:role/BoutiqueFrontendDeployRole
-          aws-region: us-east-1
+          role-to-assume: ${{ secrets.AWS_FRONTEND_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
-        shell: bash
-        run: |
-          set -euo pipefail
-          aws sts get-caller-identity
+        run: aws sts get-caller-identity
 
-      - name: Upload hashed assets
+      # Upload new hashed assets FIRST.
+      # Do not delete the old assets yet.
+      - name: Upload new assets
         working-directory: react-app
-        shell: bash
         run: |
           set -euo pipefail
 
           aws s3 sync dist/assets/ \
             s3://${S3_BUCKET}/assets/ \
-            --delete \
             --cache-control "public,max-age=31536000,immutable"
 
+      # Upload other static files except index.html and assets.
       - name: Upload static files
         working-directory: react-app
-        shell: bash
         run: |
           set -euo pipefail
 
           aws s3 sync dist/ \
             s3://${S3_BUCKET}/ \
-            --delete \
-            --exclude "assets/*"
+            --exclude "assets/*" \
+            --exclude "index.html"
 
-      - name: Upload index.html with no-cache
+      # index.html is uploaded AFTER new assets exist.
+      - name: Upload index.html
         working-directory: react-app
-        shell: bash
         run: |
           set -euo pipefail
 
@@ -147,44 +92,50 @@ jobs:
             --cache-control "no-cache,no-store,must-revalidate" \
             --content-type "text/html"
 
-      - name: Verify deployed index.html
+      # Verify S3 index.html references the exact JS bundle
+      # produced by this workflow.
+      - name: Verify new build replaced old build
         working-directory: react-app
-        shell: bash
         run: |
           set -euo pipefail
 
           LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
 
-          REMOTE_JS=$(aws s3 cp s3://${S3_BUCKET}/index.html - \
+          REMOTE_JS=$(aws s3 cp \
+            s3://${S3_BUCKET}/index.html - \
             | grep -oE 'assets/index-[^"]+\.js' \
             | head -1)
 
-          echo "Local bundle:  $LOCAL_JS"
-          echo "Remote bundle: $REMOTE_JS"
+          echo "Local JS : $LOCAL_JS"
+          echo "S3 JS    : $REMOTE_JS"
 
-          if [ "$LOCAL_JS" != "$REMOTE_JS" ]; then
-            echo "ERROR: S3 is serving a different frontend build."
+          if [ -z "$LOCAL_JS" ] || [ -z "$REMOTE_JS" ]; then
+            echo "ERROR: Could not detect JavaScript bundle."
             exit 1
           fi
 
-          echo "S3 deployment verification passed."
-
-      - name: Verify JavaScript bundle exists in S3
-        working-directory: react-app
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          JS_FILE=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
-
-          echo "Checking S3 object: $JS_FILE"
+          if [ "$LOCAL_JS" != "$REMOTE_JS" ]; then
+            echo "ERROR: S3 index.html still references an old build."
+            exit 1
+          fi
 
           aws s3api head-object \
             --bucket "${S3_BUCKET}" \
-            --key "${JS_FILE}"
+            --key "${LOCAL_JS}"
+
+          echo "New build is present in S3."
+
+      # Now it is safe to remove obsolete files.
+      - name: Remove obsolete S3 files
+        working-directory: react-app
+        run: |
+          set -euo pipefail
+
+          aws s3 sync dist/ \
+            s3://${S3_BUCKET}/ \
+            --delete
 
       - name: Invalidate CloudFront
-        shell: bash
         run: |
           set -euo pipefail
 
@@ -200,16 +151,18 @@ jobs:
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --id "${INVALIDATION_ID}"
 
-          echo "CloudFront invalidation completed."
-
-      - name: Verify website
-        shell: bash
+      - name: Verify live website
+        working-directory: react-app
         run: |
           set -euo pipefail
 
+          LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
+
+          LIVE_HTML=$(mktemp)
+
           STATUS=$(curl \
-            -s \
-            -o /tmp/site.html \
+            -sS \
+            -o "${LIVE_HTML}" \
             -w "%{http_code}" \
             https://needystuff.in/)
 
@@ -217,6 +170,14 @@ jobs:
 
           test "$STATUS" = "200"
 
-          grep -q '<div id="root">' /tmp/site.html
+          LIVE_JS=$(grep -oE 'assets/index-[^"]+\.js' "${LIVE_HTML}" | head -1)
 
-          echo "Frontend deployment successful."
+          echo "Local JS : $LOCAL_JS"
+          echo "Live JS  : $LIVE_JS"
+
+          if [ "$LOCAL_JS" != "$LIVE_JS" ]; then
+            echo "ERROR: CloudFront is still serving the old frontend."
+            exit 1
+          fi
+
+          echo "Frontend deployment verified successfully."
