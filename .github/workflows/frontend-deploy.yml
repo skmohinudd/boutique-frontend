@@ -45,14 +45,21 @@ jobs:
         run: |
           test -f dist/index.html
           test -d dist/assets
+
           echo "Generated bundles:"
           grep -oE 'assets/index-[^"]+\.(js|css)' dist/index.html || true
+
+      - name: Debug GitHub identity
+        run: |
+          echo "Repository = $GITHUB_REPOSITORY"
+          echo "Ref        = $GITHUB_REF"
+          echo "Actor      = $GITHUB_ACTOR"
 
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: ${{ secrets.AWS_FRONTEND_DEPLOY_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::663130434910:role/GitHubActions-BoutiqueFrontendDeploy
+          aws-region: us-east-1
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
@@ -106,17 +113,24 @@ jobs:
             --query 'Invalidation.Id' \
             --output text)
 
+          echo "Invalidation ID: $INVALIDATION_ID"
+
           aws cloudfront wait invalidation-completed \
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --id "${INVALIDATION_ID}"
 
       - name: Verify website
         run: |
-          STATUS=$(curl -s -o /tmp/site.html -w "%{http_code}" https://needystuff.in/)
+          STATUS=$(curl \
+            -s \
+            -o /tmp/site.html \
+            -w "%{http_code}" \
+            https://needystuff.in/)
 
           echo "HTTP status: $STATUS"
 
           test "$STATUS" = "200"
+
           grep -q '<div id="root">' /tmp/site.html
 
           echo "Frontend deployment successful."
