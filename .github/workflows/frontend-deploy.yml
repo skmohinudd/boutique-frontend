@@ -52,6 +52,14 @@ jobs:
       - name: Install dependencies
         working-directory: react-app
         run: npm ci
+      
+      - name: SonarQube Scan
+        uses: SonarSource/sonarqube-scan-action@v6
+        with:
+          projectBaseDir: react-app
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: Build frontend
         working-directory: react-app
