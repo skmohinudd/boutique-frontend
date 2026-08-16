@@ -19,7 +19,7 @@ env:
 
 jobs:
   deploy:
-    runs-on: [self-hosted, boutique, dev]
+    runs-on: self-hosted
 
     steps:
       - name: Checkout repository
