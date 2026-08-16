@@ -1,0 +1,34 @@
+name: Self Hosted Runner Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-runner:
+    runs-on: [self-hosted, boutique, dev]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check runner
+        run: |
+          echo "===== RUNNER TEST ====="
+          echo "User:"
+          whoami
+          echo "Hostname:"
+          hostname
+          echo "Working directory:"
+          pwd
+
+      - name: Check tools
+        run: |
+          node --version
+          npm --version
+          git --version
+          docker --version
+          aws --version
+          terraform version
+          kubectl version --client
+          helm version
+          trivy --version

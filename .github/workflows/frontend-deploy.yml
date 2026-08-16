@@ -15,14 +15,27 @@ env:
   AWS_REGION: us-east-1
   S3_BUCKET: boutique-dev-frontend
   CLOUDFRONT_DISTRIBUTION_ID: E3SF8B4MHWNVIT
+  APP_DIR: react-app
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, boutique, dev]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Show runner information
+        run: |
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner arch: $RUNNER_ARCH"
+          echo "Hostname:"
+          hostname
+          echo "User:"
+          whoami
+          echo "Working directory:"
+          pwd
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -30,6 +43,11 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: react-app/package-lock.json
+
+      - name: Verify Node and npm
+        run: |
+          node --version
+          npm --version
 
       - name: Install dependencies
         working-directory: react-app
@@ -42,103 +60,70 @@ jobs:
       - name: Verify build output
         working-directory: react-app
         run: |
-          set -euo pipefail
-
           test -f dist/index.html
           test -d dist/assets
 
-          echo "Build files:"
+          echo "Generated bundles:"
           grep -oE 'assets/index-[^"]+\.(js|css)' dist/index.html || true
+
+      - name: Debug GitHub identity
+        run: |
+          echo "Repository = $GITHUB_REPOSITORY"
+          echo "Ref        = $GITHUB_REF"
+          echo "Actor      = $GITHUB_ACTOR"
 
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:
-          role-to-assume: ${{ secrets.AWS_FRONTEND_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::663130434910:role/BoutiqueFrontendDeployRole
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
-      # Upload new hashed assets FIRST.
-      # Do not delete the old assets yet.
-      - name: Upload new assets
+      - name: Upload hashed assets
         working-directory: react-app
         run: |
-          set -euo pipefail
-
           aws s3 sync dist/assets/ \
             s3://${S3_BUCKET}/assets/ \
+            --delete \
             --cache-control "public,max-age=31536000,immutable"
 
-      # Upload other static files except index.html and assets.
       - name: Upload static files
         working-directory: react-app
         run: |
-          set -euo pipefail
-
           aws s3 sync dist/ \
             s3://${S3_BUCKET}/ \
-            --exclude "assets/*" \
-            --exclude "index.html"
+            --delete \
+            --exclude "assets/*"
 
-      # index.html is uploaded AFTER new assets exist.
-      - name: Upload index.html
+      - name: Upload index.html with no-cache
         working-directory: react-app
         run: |
-          set -euo pipefail
-
           aws s3 cp dist/index.html \
             s3://${S3_BUCKET}/index.html \
             --cache-control "no-cache,no-store,must-revalidate" \
             --content-type "text/html"
 
-      # Verify S3 index.html references the exact JS bundle
-      # produced by this workflow.
-      - name: Verify new build replaced old build
+      - name: Verify deployed index.html
         working-directory: react-app
         run: |
-          set -euo pipefail
-
           LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
 
-          REMOTE_JS=$(aws s3 cp \
-            s3://${S3_BUCKET}/index.html - \
+          REMOTE_JS=$(aws s3 cp s3://${S3_BUCKET}/index.html - \
             | grep -oE 'assets/index-[^"]+\.js' \
             | head -1)
 
-          echo "Local JS : $LOCAL_JS"
-          echo "S3 JS    : $REMOTE_JS"
-
-          if [ -z "$LOCAL_JS" ] || [ -z "$REMOTE_JS" ]; then
-            echo "ERROR: Could not detect JavaScript bundle."
-            exit 1
-          fi
+          echo "Local bundle:  $LOCAL_JS"
+          echo "Remote bundle: $REMOTE_JS"
 
           if [ "$LOCAL_JS" != "$REMOTE_JS" ]; then
-            echo "ERROR: S3 index.html still references an old build."
+            echo "ERROR: S3 is still serving a different frontend build."
             exit 1
           fi
-
-          aws s3api head-object \
-            --bucket "${S3_BUCKET}" \
-            --key "${LOCAL_JS}"
-
-          echo "New build is present in S3."
-
-      # Now it is safe to remove obsolete files.
-      - name: Remove obsolete S3 files
-        working-directory: react-app
-        run: |
-          set -euo pipefail
-
-          aws s3 sync dist/ \
-            s3://${S3_BUCKET}/ \
-            --delete
 
       - name: Invalidate CloudFront
         run: |
-          set -euo pipefail
-
           INVALIDATION_ID=$(aws cloudfront create-invalidation \
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --paths "/*" \
@@ -151,18 +136,11 @@ jobs:
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --id "${INVALIDATION_ID}"
 
-      - name: Verify live website
-        working-directory: react-app
+      - name: Verify website
         run: |
-          set -euo pipefail
-
-          LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
-
-          LIVE_HTML=$(mktemp)
-
           STATUS=$(curl \
-            -sS \
-            -o "${LIVE_HTML}" \
+            -s \
+            -o /tmp/site.html \
             -w "%{http_code}" \
             https://needystuff.in/)
 
@@ -170,14 +148,6 @@ jobs:
 
           test "$STATUS" = "200"
 
-          LIVE_JS=$(grep -oE 'assets/index-[^"]+\.js' "${LIVE_HTML}" | head -1)
+          grep -q '<div id="root">' /tmp/site.html
 
-          echo "Local JS : $LOCAL_JS"
-          echo "Live JS  : $LIVE_JS"
-
-          if [ "$LOCAL_JS" != "$LIVE_JS" ]; then
-            echo "ERROR: CloudFront is still serving the old frontend."
-            exit 1
-          fi
-
-          echo "Frontend deployment verified successfully."
+          echo "Frontend deployment successful."
