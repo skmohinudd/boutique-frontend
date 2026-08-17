@@ -64,11 +64,12 @@ jobs:
       
       - name: SonarQube Quality Gate
         uses: SonarSource/sonarqube-quality-gate-action@v1
+        with:
+          scanMetadataReportFile: react-app/.scannerwork/report-task.txt
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-      
       - name: Build frontend
         working-directory: react-app
         run: npm run build
