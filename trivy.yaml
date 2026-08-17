@@ -1,0 +1,9 @@
+severity:
+  - HIGH
+  - CRITICAL
+
+scanners:
+  - vuln
+  - secret
+
+exit-code: 1
