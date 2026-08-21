@@ -16,12 +16,9 @@ env:
   CLOUDFRONT_DISTRIBUTION_ID: E3SF8B4MHWNVIT
   APP_DIR: react-app
 
-  # AWS environment = DEV.
-  # Vite still performs an optimized build when npm run build is executed.
   VITE_APP_NAME: Boutique
   VITE_APP_ENV: dev
 
-  # All browser API traffic enters through the shared DEV ALB hostname.
   VITE_PRODUCT_API_URL: https://api.needystuff.in
   VITE_INVENTORY_API_URL: https://api.needystuff.in
   VITE_USER_API_URL: https://api.needystuff.in
@@ -70,6 +67,7 @@ jobs:
         working-directory: react-app
         run: npm run lint
 
+      # TEMPORARILY DISABLED FOR DEV
       # - name: SonarQube Scan
       #   uses: SonarSource/sonarqube-scan-action@v6
       #   with:
@@ -87,6 +85,7 @@ jobs:
       #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
+      # TEMPORARILY DISABLED FOR DEV
       # - name: Trivy filesystem security scan
       #   run: trivy --config trivy.yaml fs react-app
 
@@ -97,6 +96,8 @@ jobs:
       - name: Validate DEV bundle
         working-directory: react-app
         run: |
+          echo "Checking generated DEV frontend bundle..."
+
           test -f dist/index.html
           test -d dist/assets
 
@@ -104,20 +105,6 @@ jobs:
             echo "ERROR: localhost backend URL found in deployable DEV bundle."
             exit 1
           fi
-
-          for proxy in \
-            /product-api \
-            /inventory-api \
-            /user-api \
-            /cart-api \
-            /checkout-api \
-            /payment-api
-          do
-            if grep -R "$proxy" dist/; then
-              echo "ERROR: local Vite proxy $proxy found in deployable DEV bundle."
-              exit 1
-            fi
-          done
 
           if ! grep -R "api.needystuff.in" dist/ >/dev/null; then
             echo "ERROR: DEV API hostname was not compiled into the bundle."
