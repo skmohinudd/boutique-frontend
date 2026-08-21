@@ -1,10 +1,9 @@
-name: Deploy Boutique Frontend
+name: Deploy Boutique Frontend DEV
 
 on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 permissions:
@@ -16,6 +15,28 @@ env:
   S3_BUCKET: boutique-dev-frontend
   CLOUDFRONT_DISTRIBUTION_ID: E3SF8B4MHWNVIT
   APP_DIR: react-app
+
+  # AWS environment = DEV.
+  # Vite still performs an optimized build when npm run build is executed.
+  VITE_APP_NAME: Boutique
+  VITE_APP_ENV: dev
+
+  # All browser API traffic enters through the shared DEV ALB hostname.
+  VITE_PRODUCT_API_URL: https://api.needystuff.in
+  VITE_INVENTORY_API_URL: https://api.needystuff.in
+  VITE_USER_API_URL: https://api.needystuff.in
+  VITE_CART_API_URL: https://api.needystuff.in
+  VITE_CHECKOUT_API_URL: https://api.needystuff.in
+  VITE_PAYMENT_API_URL: https://api.needystuff.in
+
+  VITE_API_TIMEOUT_MS: "10000"
+  VITE_DEFAULT_CURRENCY: USD
+  VITE_DEMO_CARD_LAST4: "4242"
+
+  VITE_ENABLE_ADVERTISEMENTS: "true"
+  VITE_ENABLE_RECOMMENDATIONS: "false"
+  VITE_ENABLE_CURRENCY: "false"
+  VITE_ENABLE_ASSISTANT: "false"
 
 jobs:
   deploy:
@@ -30,11 +51,8 @@ jobs:
           echo "Runner name: $RUNNER_NAME"
           echo "Runner OS: $RUNNER_OS"
           echo "Runner arch: $RUNNER_ARCH"
-          echo "Hostname:"
           hostname
-          echo "User:"
           whoami
-          echo "Working directory:"
           pwd
 
       - name: Setup Node.js
@@ -44,14 +62,13 @@ jobs:
           cache: npm
           cache-dependency-path: react-app/package-lock.json
 
-      - name: Verify Node and npm
-        run: |
-          node --version
-          npm --version
-
       - name: Install dependencies
         working-directory: react-app
         run: npm ci
+
+      - name: Lint frontend
+        working-directory: react-app
+        run: npm run lint
 
       - name: SonarQube Scan
         uses: SonarSource/sonarqube-scan-action@v6
@@ -61,7 +78,6 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      
       - name: SonarQube Quality Gate
         uses: SonarSource/sonarqube-quality-gate-action@v1
         with:
@@ -72,27 +88,43 @@ jobs:
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
       - name: Trivy filesystem security scan
-        working-directory: .
-        run: |
-          trivy --config trivy.yaml fs react-app
-      - name: Build frontend
+        run: trivy --config trivy.yaml fs react-app
+
+      - name: Build DEV frontend
         working-directory: react-app
         run: npm run build
 
-      - name: Verify build output
+      - name: Validate DEV bundle
         working-directory: react-app
         run: |
           test -f dist/index.html
           test -d dist/assets
 
-          echo "Generated bundles:"
-          grep -oE 'assets/index-[^"]+\.(js|css)' dist/index.html || true
+          if grep -R -E 'http://localhost:808[0-9]' dist/; then
+            echo "ERROR: localhost backend URL found in deployable DEV bundle."
+            exit 1
+          fi
 
-      - name: Debug GitHub identity
-        run: |
-          echo "Repository = $GITHUB_REPOSITORY"
-          echo "Ref        = $GITHUB_REF"
-          echo "Actor      = $GITHUB_ACTOR"
+          for proxy in \
+            /product-api \
+            /inventory-api \
+            /user-api \
+            /cart-api \
+            /checkout-api \
+            /payment-api
+          do
+            if grep -R "$proxy" dist/; then
+              echo "ERROR: local Vite proxy $proxy found in deployable DEV bundle."
+              exit 1
+            fi
+          done
+
+          if ! grep -R "api.needystuff.in" dist/ >/dev/null; then
+            echo "ERROR: DEV API hostname was not compiled into the bundle."
+            exit 1
+          fi
+
+          echo "DEV frontend bundle validation passed."
 
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
@@ -131,7 +163,6 @@ jobs:
         working-directory: react-app
         run: |
           LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
-
           REMOTE_JS=$(aws s3 cp s3://${S3_BUCKET}/index.html - \
             | grep -oE 'assets/index-[^"]+\.js' \
             | head -1)
@@ -139,10 +170,7 @@ jobs:
           echo "Local bundle:  $LOCAL_JS"
           echo "Remote bundle: $REMOTE_JS"
 
-          if [ "$LOCAL_JS" != "$REMOTE_JS" ]; then
-            echo "ERROR: S3 is still serving a different frontend build."
-            exit 1
-          fi
+          test "$LOCAL_JS" = "$REMOTE_JS"
 
       - name: Invalidate CloudFront
         run: |
@@ -167,9 +195,7 @@ jobs:
             https://needystuff.in/)
 
           echo "HTTP status: $STATUS"
-
           test "$STATUS" = "200"
-
           grep -q '<div id="root">' /tmp/site.html
 
-          echo "Frontend deployment successful."
+          echo "Boutique DEV frontend deployment successful."

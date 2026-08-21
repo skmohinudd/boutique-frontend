@@ -3,8 +3,6 @@ import Footer from "./components/layout/Footer";
 import Header from "./components/layout/Header";
 import CartPage from "./pages/CartPage";
 import HomePage from "./pages/HomePage";
-import SignupPage from "./pages/SignupPage";
-import LoginPage from "./pages/LoginPage";
 import OrderDetailsPage from "./pages/OrderDetailsPage";
 import PaymentPage from "./pages/PaymentPage";
 import ProductDetailsPage from "./pages/ProductDetailsPage";

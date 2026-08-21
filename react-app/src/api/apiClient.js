@@ -1,18 +1,12 @@
 import axios from "axios";
 import { environment } from "../config/environment";
 
-const SESSION_STORAGE_KEY = "boutique-session-id";
-
-function getSessionId() {
-  return localStorage.getItem(SESSION_STORAGE_KEY);
-}
-
 function createApiError(error) {
-  const status = error.response?.status || null;
-
+  const status = error.response?.status ?? null;
   const responseData = error.response?.data;
 
   const message =
+    responseData?.detail ||
     responseData?.message ||
     responseData?.error ||
     error.message ||
@@ -29,34 +23,21 @@ function createApiError(error) {
 }
 
 export function createApiClient(baseURL) {
+  if (!baseURL) {
+    throw new Error("API client baseURL is required.");
+  }
+
   const apiClient = axios.create({
     baseURL,
     timeout: environment.api.timeoutMs,
-
     headers: {
       Accept: "application/json",
-      "Content-Type": "application/json"
-    }
-  });
-
-  apiClient.interceptors.request.use(
-    (config) => {
-      const sessionId = getSessionId();
-
-      if (sessionId) {
-        config.headers["X-Session-Id"] = sessionId;
-      }
-
-      return config;
     },
-
-    (error) => Promise.reject(createApiError(error))
-  );
+  });
 
   apiClient.interceptors.response.use(
     (response) => response,
-
-    (error) => Promise.reject(createApiError(error))
+    (error) => Promise.reject(createApiError(error)),
   );
 
   return apiClient;
