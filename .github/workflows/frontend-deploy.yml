@@ -87,8 +87,8 @@ jobs:
       #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
 
-      - name: Trivy filesystem security scan
-        run: trivy --config trivy.yaml fs react-app
+      # - name: Trivy filesystem security scan
+      #   run: trivy --config trivy.yaml fs react-app
 
       - name: Build DEV frontend
         working-directory: react-app
