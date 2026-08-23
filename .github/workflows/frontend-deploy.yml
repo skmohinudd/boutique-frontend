@@ -16,19 +16,57 @@ env:
   CLOUDFRONT_DISTRIBUTION_ID: E3SF8B4MHWNVIT
   APP_DIR: react-app
 
+  # ============================================================
+  # FRONTEND APPLICATION
+  # ============================================================
+
   VITE_APP_NAME: Boutique
   VITE_APP_ENV: dev
+
+  # ============================================================
+  # BACKEND API
+  #
+  # Every frontend API client uses the same public ALB hostname.
+  # Individual paths are added by the frontend API clients.
+  # ============================================================
 
   VITE_PRODUCT_API_URL: https://api.needystuff.in
   VITE_INVENTORY_API_URL: https://api.needystuff.in
   VITE_USER_API_URL: https://api.needystuff.in
   VITE_CART_API_URL: https://api.needystuff.in
-  VITE_CHECKOUT_API_URL: https://api.needystuff.in
+  VITE_ORDER_API_URL: https://api.needystuff.in
   VITE_PAYMENT_API_URL: https://api.needystuff.in
+  VITE_CHECKOUT_API_URL: https://api.needystuff.in
+  VITE_SHIPPING_API_URL: https://api.needystuff.in
+
+  # ============================================================
+  # API SETTINGS
+  # ============================================================
 
   VITE_API_TIMEOUT_MS: "10000"
+
+  # ============================================================
+  # COMMERCE
+  # ============================================================
+
   VITE_DEFAULT_CURRENCY: USD
   VITE_DEMO_CARD_LAST4: "4242"
+
+  # ============================================================
+  # DEV AUTHENTICATION
+  #
+  # Current frontend uses local authentication.
+  # Later replace with Cognito.
+  # ============================================================
+
+  VITE_AUTH_MODE: local
+  VITE_COGNITO_REGION: ""
+  VITE_COGNITO_USER_POOL_ID: ""
+  VITE_COGNITO_CLIENT_ID: ""
+
+  # ============================================================
+  # FEATURE FLAGS
+  # ============================================================
 
   VITE_ENABLE_ADVERTISEMENTS: "true"
   VITE_ENABLE_RECOMMENDATIONS: "false"
@@ -40,8 +78,16 @@ jobs:
     runs-on: self-hosted
 
     steps:
+      # ========================================================
+      # CHECKOUT
+      # ========================================================
+
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      # ========================================================
+      # RUNNER INFORMATION
+      # ========================================================
 
       - name: Show runner information
         run: |
@@ -52,6 +98,10 @@ jobs:
           whoami
           pwd
 
+      # ========================================================
+      # NODE
+      # ========================================================
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -59,39 +109,73 @@ jobs:
           cache: npm
           cache-dependency-path: react-app/package-lock.json
 
+      # ========================================================
+      # DEPENDENCIES
+      # ========================================================
+
       - name: Install dependencies
         working-directory: react-app
         run: npm ci
+
+      # ========================================================
+      # LINT
+      # ========================================================
 
       - name: Lint frontend
         working-directory: react-app
         run: npm run lint
 
-      # TEMPORARILY DISABLED FOR DEV
-      # - name: SonarQube Scan
-      #   uses: SonarSource/sonarqube-scan-action@v6
-      #   with:
-      #     projectBaseDir: react-app
-      #   env:
-      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      # ========================================================
+      # VERIFY REQUIRED VITE CONFIG BEFORE BUILD
+      #
+      # This prevents another successful workflow that generates
+      # a broken browser bundle.
+      # ========================================================
 
-      # - name: SonarQube Quality Gate
-      #   uses: SonarSource/sonarqube-quality-gate-action@v1
-      #   with:
-      #     scanMetadataReportFile: react-app/.scannerwork/report-task.txt
-      #   timeout-minutes: 5
-      #   env:
-      #     SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      #     SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Validate frontend build configuration
+        run: |
+          echo "Checking mandatory Vite variables..."
 
-      # TEMPORARILY DISABLED FOR DEV
-      # - name: Trivy filesystem security scan
-      #   run: trivy --config trivy.yaml fs react-app
+          REQUIRED_VARS=(
+            VITE_PRODUCT_API_URL
+            VITE_INVENTORY_API_URL
+            VITE_USER_API_URL
+            VITE_CART_API_URL
+            VITE_ORDER_API_URL
+            VITE_PAYMENT_API_URL
+            VITE_CHECKOUT_API_URL
+            VITE_SHIPPING_API_URL
+          )
+
+          FAILED=0
+
+          for VAR in "${REQUIRED_VARS[@]}"; do
+            if [ -z "${!VAR:-}" ]; then
+              echo "ERROR: $VAR is missing"
+              FAILED=1
+            else
+              echo "OK: $VAR"
+            fi
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "Frontend configuration validation failed."
+            exit 1
+          fi
+
+          echo "All required frontend API variables are configured."
+
+      # ========================================================
+      # BUILD
+      # ========================================================
 
       - name: Build DEV frontend
         working-directory: react-app
         run: npm run build
+
+      # ========================================================
+      # VALIDATE BUILD
+      # ========================================================
 
       - name: Validate DEV bundle
         working-directory: react-app
@@ -100,6 +184,15 @@ jobs:
 
           test -f dist/index.html
           test -d dist/assets
+
+          JS_FILE=$(find dist/assets -type f -name '*.js' | head -1)
+          CSS_FILE=$(find dist/assets -type f -name '*.css' | head -1)
+
+          test -n "$JS_FILE"
+          test -n "$CSS_FILE"
+
+          echo "JS bundle:  $JS_FILE"
+          echo "CSS bundle: $CSS_FILE"
 
           if grep -R -E 'http://localhost:808[0-9]' dist/; then
             echo "ERROR: localhost backend URL found in deployable DEV bundle."
@@ -113,6 +206,10 @@ jobs:
 
           echo "DEV frontend bundle validation passed."
 
+      # ========================================================
+      # AWS AUTHENTICATION
+      # ========================================================
+
       - name: Authenticate to AWS using OIDC
         uses: aws-actions/configure-aws-credentials@v5
         with:
@@ -122,6 +219,13 @@ jobs:
       - name: Verify AWS identity
         run: aws sts get-caller-identity
 
+      # ========================================================
+      # HASHED ASSETS
+      #
+      # Safe to cache for a long time because Vite changes the
+      # filename whenever the content changes.
+      # ========================================================
+
       - name: Upload hashed assets
         working-directory: react-app
         run: |
@@ -130,13 +234,24 @@ jobs:
             --delete \
             --cache-control "public,max-age=31536000,immutable"
 
+      # ========================================================
+      # STATIC FILES
+      # ========================================================
+
       - name: Upload static files
         working-directory: react-app
         run: |
           aws s3 sync dist/ \
             s3://${S3_BUCKET}/ \
             --delete \
-            --exclude "assets/*"
+            --exclude "assets/*" \
+            --exclude "index.html"
+
+      # ========================================================
+      # INDEX.HTML
+      #
+      # Never aggressively cache SPA index.html.
+      # ========================================================
 
       - name: Upload index.html with no-cache
         working-directory: react-app
@@ -146,10 +261,15 @@ jobs:
             --cache-control "no-cache,no-store,must-revalidate" \
             --content-type "text/html"
 
+      # ========================================================
+      # VERIFY S3 ARTIFACT
+      # ========================================================
+
       - name: Verify deployed index.html
         working-directory: react-app
         run: |
           LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
+
           REMOTE_JS=$(aws s3 cp s3://${S3_BUCKET}/index.html - \
             | grep -oE 'assets/index-[^"]+\.js' \
             | head -1)
@@ -158,6 +278,10 @@ jobs:
           echo "Remote bundle: $REMOTE_JS"
 
           test "$LOCAL_JS" = "$REMOTE_JS"
+
+      # ========================================================
+      # CLOUDFRONT
+      # ========================================================
 
       - name: Invalidate CloudFront
         run: |
@@ -173,6 +297,10 @@ jobs:
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --id "${INVALIDATION_ID}"
 
+      # ========================================================
+      # PUBLIC WEBSITE VERIFICATION
+      # ========================================================
+
       - name: Verify website
         run: |
           STATUS=$(curl \
@@ -182,7 +310,25 @@ jobs:
             https://needystuff.in/)
 
           echo "HTTP status: $STATUS"
+
           test "$STATUS" = "200"
+
           grep -q '<div id="root">' /tmp/site.html
+
+          LIVE_JS=$(grep -oE '/assets/index-[^"]+\.js' /tmp/site.html | head -1)
+
+          echo "Live JavaScript bundle: $LIVE_JS"
+
+          test -n "$LIVE_JS"
+
+          JS_STATUS=$(curl \
+            -s \
+            -o /dev/null \
+            -w "%{http_code}" \
+            "https://needystuff.in${LIVE_JS}")
+
+          echo "Live JavaScript HTTP status: $JS_STATUS"
+
+          test "$JS_STATUS" = "200"
 
           echo "Boutique DEV frontend deployment successful."
