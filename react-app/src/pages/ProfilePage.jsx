@@ -1,10 +1,7 @@
-import { Link } from "react-router-dom";
-export default function ProfilePage() {
-  return (
-    <main className="page-container">
-      <h1>Profile</h1>
-      <p>This route is prepared for the corresponding backend capability.</p>
-      <Link to="/">Return to catalogue</Link>
-    </main>
-  );
-}
+import { useState } from "react";
+import { toast } from "react-toastify";
+import { useAuthStore } from "../features/auth/authStore";
+
+export default function ProfilePage(){const user=useAuthStore(s=>s.currentUser);const updateProfile=useAuthStore(s=>s.updateProfile);const[form,setForm]=useState({...user});const[busy,setBusy]=useState(false);const change=k=>e=>setForm({...form,[k]:e.target.value});async function submit(e){e.preventDefault();setBusy(true);try{await updateProfile(form);toast.success("Profile updated");}catch(err){toast.error(err.message);}finally{setBusy(false);}}
+return <main className="page-container account-page"><div className="account-heading"><div><span>MY ACCOUNT</span><h1>Hello, {user.firstName}</h1><p>Manage the profile used by checkout and notifications.</p></div><div className="profile-avatar">{user.firstName?.[0]}{user.lastName?.[0]}</div></div><form className="profile-card" onSubmit={submit}><div className="form-grid"><label>Username<input value={form.username||""} onChange={change("username")}/></label><label>Email<input value={form.email||""} disabled/></label><label>First name<input value={form.firstName||""} onChange={change("firstName")}/></label><label>Last name<input value={form.lastName||""} onChange={change("lastName")}/></label><label>Phone<input value={form.phoneNumber||""} onChange={change("phoneNumber")}/></label><label>Country<input value={form.country||""} onChange={change("country")}/></label></div><div className="profile-security"><strong>Password</strong><span>Never displayed or returned. Use Cognito for production password lifecycle.</span></div><button className="auth-submit" disabled={busy}>{busy?"Saving…":"Save profile"}</button></form></main>}
+

@@ -1,0 +1,6 @@
+<svg width="720" height="520" viewBox="0 0 720 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+<defs><linearGradient id="g" x1="80" y1="40" x2="650" y2="480" gradientUnits="userSpaceOnUse"><stop stop-color="#F8DCE8"/><stop offset="1" stop-color="#E8D8F3"/></linearGradient><filter id="s"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#512B4E" flood-opacity=".16"/></filter></defs>
+<rect width="720" height="520" rx="42" fill="url(#g)"/><circle cx="590" cy="96" r="56" fill="#fff" fill-opacity=".55"/><circle cx="102" cy="416" r="76" fill="#fff" fill-opacity=".4"/>
+<g filter="url(#s)"><rect x="166" y="190" width="390" height="205" rx="26" fill="white"/><path d="M166 248H556" stroke="#EADDE7" stroke-width="4"/><path d="M238 190L282 124H432L478 190" fill="#773A6B"/><path d="M277 124H437" stroke="#4F274B" stroke-width="10" stroke-linecap="round"/><rect x="216" y="285" width="108" height="74" rx="16" fill="#F5E8EF"/><path d="M242 316H298M242 337H282" stroke="#8D4B76" stroke-width="8" stroke-linecap="round"/><circle cx="481" cy="334" r="34" fill="#6A3564"/><path d="M466 334L477 345L498 321" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/></g>
+<text x="360" y="454" text-anchor="middle" fill="#4B2B47" font-family="Arial, sans-serif" font-size="24" font-weight="700">Packed with care • tracked by events</text>
+</svg>
