@@ -1,34 +1,66 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { toast } from "react-toastify";
-import { useAuthStore } from "../features/auth/authStore";
-
+import { Navigate, useLocation } from "react-router-dom";
+import {
+  LockKeyhole,
+  PackageCheck,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
+import { useBoutiqueAuth } from "../auth/AuthProvider";
 export default function LoginPage() {
-  const navigate = useNavigate();
+  const auth = useBoutiqueAuth();
   const location = useLocation();
-  const login = useAuthStore((state) => state.login);
-  const [form, setForm] = useState({ email: "", password: "" });
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event) {
-    event.preventDefault(); setBusy(true);
-    try {
-      const user = await login(form);
-      toast.success(`Welcome back, ${user.firstName}`);
-      navigate(location.state?.from || "/", { replace: true });
-    } catch (error) { toast.error(error.message); }
-    finally { setBusy(false); }
-  }
-
-  return <main className="auth-page">
-    <section className="auth-visual"><img src="/static/boutique-auth.svg" alt="Boutique shopping"/><div><span>WELCOME BACK</span><h1>Your Boutique account, all in one place.</h1><p>Sign in to checkout, track orders, and receive order confirmation notifications.</p></div></section>
-    <section className="auth-panel"><form className="auth-card" onSubmit={submit}><div className="auth-mark">B</div><h2>Sign in</h2><p>Use the account you registered on this browser.</p>
-      <label>Email<input type="email" required autoComplete="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})}/></label>
-      <label>Password<input type="password" required minLength="8" autoComplete="current-password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})}/></label>
-      <button className="auth-submit" disabled={busy}>{busy?"Signing in…":"Sign in"}</button>
-      <p className="auth-switch">New to Boutique? <Link to="/signup">Create an account</Link></p>
-      <small className="security-note">DEV auth stores only a password hash in your browser. Production identity will use Cognito.</small>
-    </form></section>
-  </main>;
+  if (auth.isAuthenticated) return <Navigate to="/account" replace />;
+  const signIn = () => auth.signIn(location.state?.from || "/account");
+  return (
+    <main className="auth-layout">
+      <section className="auth-art">
+        <div className="auth-art-content">
+          <span className="eyebrow">WELCOME BACK</span>
+          <h1>Your shopping, your orders, one secure account.</h1>
+          <p>
+            Sign in to continue checkout, view orders and manage your details.
+          </p>
+          <div className="auth-benefits">
+            <span>
+              <ShieldCheck /> Secure sign-in
+            </span>
+            <span>
+              <PackageCheck /> Order history
+            </span>
+            <span>
+              <UserRound /> Profile management
+            </span>
+          </div>
+        </div>
+      </section>
+      <section className="auth-box-wrap">
+        <div className="auth-box">
+          <div className="auth-logo">
+            <img src="/static/icons/Hipster_NavLogo.svg" alt="" />
+            <span>Boutique</span>
+          </div>
+          <h2>Sign in to Boutique</h2>
+          <p>You’ll continue on our secure sign-in page.</p>
+          {auth.error && <p className="payment-error">{auth.error}</p>}
+          <button
+            className="auth-submit"
+            onClick={signIn}
+            disabled={auth.loading}
+          >
+            <LockKeyhole size={19} />
+            {auth.loading ? "Preparing sign-in…" : "Continue to secure sign in"}
+          </button>
+          <div className="auth-divider">
+            <span>New here?</span>
+          </div>
+          <a className="secondary-button full" href="/signup">
+            Create an account
+          </a>
+          <small>
+            After signing in, you’ll return to the page you were trying to open.
+          </small>
+        </div>
+      </section>
+    </main>
+  );
 }
-

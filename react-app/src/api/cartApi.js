@@ -1,65 +1,29 @@
 import { environment } from "../config/environment";
 import { createApiClient } from "./apiClient";
-
-const cartClient = createApiClient(
-  environment.api.cartServiceUrl,
-);
-
+const cartClient = createApiClient(environment.api.cartServiceUrl);
 function requireUserId(userId) {
-  if (!userId) {
-    throw new Error("A development user ID is required.");
-  }
+  if (!userId) throw new Error("Your account profile is not ready yet.");
 }
-
 export async function clearBackendCart(userId) {
   requireUserId(userId);
-
-  await cartClient.delete(
-    `/api/v1/carts/${encodeURIComponent(userId)}`,
-  );
+  await cartClient.delete(`/api/v1/carts/${encodeURIComponent(userId)}`);
 }
-
-export async function addBackendCartItem(
-  userId,
-  productId,
-  quantity,
-) {
+export async function addBackendCartItem(userId, productId, quantity) {
   requireUserId(userId);
-
-  const response = await cartClient.post(
-    `/api/v1/carts/${encodeURIComponent(userId)}/items`,
-    {
+  return (
+    await cartClient.post(`/api/v1/carts/${encodeURIComponent(userId)}/items`, {
       productId,
       quantity,
-    },
-  );
-
-  return response.data;
+    })
+  ).data;
 }
-
-export async function synchronizeBackendCart(
-  userId,
-  items,
-) {
+export async function synchronizeBackendCart(userId, items) {
   requireUserId(userId);
-
-  if (!Array.isArray(items) || items.length === 0) {
-    throw new Error("Cannot synchronize an empty cart.");
-  }
-
-  // The React cart is currently the local UI source of truth.
-  // Rebuild the backend cart immediately before checkout.
+  if (!Array.isArray(items) || items.length === 0)
+    throw new Error("Your cart is empty.");
   await clearBackendCart(userId);
-
   let cart = null;
-
-  for (const item of items) {
-    cart = await addBackendCartItem(
-      userId,
-      item.productId,
-      item.quantity,
-    );
-  }
-
+  for (const item of items)
+    cart = await addBackendCartItem(userId, item.productId, item.quantity);
   return cart;
 }

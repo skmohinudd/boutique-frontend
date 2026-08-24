@@ -170,3 +170,5 @@ github-sync-reports/
 .plain-lambda-backups/
 .final-consolidated-backups/
 .lambda-image-removal-backups/
+frontend-master-backup-*/
+*.backup-*

@@ -1,100 +1,95 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { createUser, updateUser } from "../../api/userApi";
+import { createUser, getUser, updateUser } from "../../api/userApi";
 
-const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
-
-async function hashPassword(password) {
-  const bytes = new TextEncoder().encode(password);
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
+const mappingKey = (sub) => `boutique-user-map:${sub}`;
+const prettyName = (email) => {
+  const base = String(email || "Shopper")
+    .split("@")[0]
+    .replace(/[._-]+/g, " ")
+    .trim();
+  return base ? base.replace(/\b\w/g, (c) => c.toUpperCase()) : "Shopper";
+};
 
 export const useAuthStore = create(
   persist(
     (set, get) => ({
       currentUser: null,
-      accounts: [],
-
-      register: async ({ username, firstName, lastName, email, phoneNumber, country, password }) => {
-        const normalizedEmail = normalizeEmail(email);
-        if (get().accounts.some((account) => account.email === normalizedEmail)) {
-          throw new Error("An account with this email already exists in this browser.");
+      profileStatus: "idle",
+      profileError: "",
+      setSignedOut: () =>
+        set({ currentUser: null, profileStatus: "idle", profileError: "" }),
+      syncFromCognito: async (claims) => {
+        const sub = claims?.sub;
+        const email = claims?.email;
+        if (!sub || !email)
+          throw new Error(
+            "Your sign-in did not return the required account information.",
+          );
+        set({ profileStatus: "loading", profileError: "" });
+        try {
+          const mappedId = localStorage.getItem(mappingKey(sub));
+          if (mappedId) {
+            try {
+              const existing = await getUser(mappedId);
+              const merged = {
+                ...existing,
+                cognitoSub: sub,
+                email: existing.email || email,
+              };
+              set({ currentUser: merged, profileStatus: "ready" });
+              return merged;
+            } catch (error) {
+              if (error?.status !== 404) throw error;
+              localStorage.removeItem(mappingKey(sub));
+            }
+          }
+          const display = claims.given_name || prettyName(email);
+          const created = await createUser({
+            email,
+            firstName: claims.given_name || display,
+            lastName: claims.family_name || "Customer",
+            phoneNumber: claims.phone_number || "",
+            cognitoSub: sub,
+          });
+          localStorage.setItem(mappingKey(sub), created.id);
+          const merged = {
+            ...created,
+            cognitoSub: sub,
+            email: created.email || email,
+          };
+          set({ currentUser: merged, profileStatus: "ready" });
+          return merged;
+        } catch (error) {
+          const message =
+            error?.status === 409
+              ? "Your sign-in succeeded, but we could not link your existing shopping profile automatically. Please try again or contact support."
+              : error.message || "Unable to load your account profile.";
+          set({ profileStatus: "error", profileError: message });
+          throw error;
         }
-
-        const created = await createUser({
-          email: normalizedEmail,
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          phoneNumber: phoneNumber.trim(),
-          cognitoSub: `web-local-${crypto.randomUUID()}`,
-        });
-
-        const account = {
-          id: created.id,
-          username: username.trim(),
-          firstName: created.firstName,
-          lastName: created.lastName,
-          email: created.email,
-          phoneNumber: created.phoneNumber || phoneNumber.trim(),
-          country: country.trim(),
-          passwordHash: await hashPassword(password),
-          createdAt: created.createdAt || new Date().toISOString(),
-        };
-
-        set((state) => ({
-          accounts: [...state.accounts, account],
-          currentUser: account,
-        }));
-        return account;
       },
-
-      login: async ({ email, password }) => {
-        const normalizedEmail = normalizeEmail(email);
-        const passwordHash = await hashPassword(password);
-        const account = get().accounts.find(
-          (candidate) => candidate.email === normalizedEmail && candidate.passwordHash === passwordHash,
-        );
-        if (!account) {
-          throw new Error("Invalid email or password. Register first on this browser if this is your first visit.");
-        }
-        set({ currentUser: account });
-        return account;
-      },
-
-      logout: () => set({ currentUser: null }),
-
-      updateProfile: async ({ username, firstName, lastName, phoneNumber, country }) => {
+      updateProfile: async (changes) => {
         const current = get().currentUser;
-        if (!current) throw new Error("You must be signed in.");
-
+        if (!current?.id)
+          throw new Error("Your account profile is not ready yet.");
         const updated = await updateUser(current.id, {
-          firstName: firstName.trim(),
-          lastName: lastName.trim(),
-          phoneNumber: phoneNumber.trim(),
+          firstName: String(changes.firstName || "").trim(),
+          lastName: String(changes.lastName || "").trim(),
+          phoneNumber: String(changes.phoneNumber || "").trim(),
         });
         const merged = {
           ...current,
-          username: username.trim(),
-          firstName: updated.firstName,
-          lastName: updated.lastName,
-          phoneNumber: updated.phoneNumber || "",
-          country: country.trim(),
+          ...updated,
+          country: changes.country || current.country || "India",
         };
-
-        set((state) => ({
-          currentUser: merged,
-          accounts: state.accounts.map((account) => account.id === merged.id ? merged : account),
-        }));
+        set({ currentUser: merged });
         return merged;
       },
     }),
     {
-      name: "boutique-auth-v1",
-      partialize: (state) => ({ currentUser: state.currentUser, accounts: state.accounts }),
+      name: "boutique-account-v2",
+      partialize: (state) => ({ currentUser: state.currentUser }),
     },
   ),
 );
-

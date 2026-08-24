@@ -13,4 +13,3 @@ export const useOrderStore = create(
     { name: "boutique-orders-v1" },
   ),
 );
-
