@@ -4,32 +4,31 @@ on:
   push:
     branches:
       - main
+
   workflow_dispatch:
 
+# Prevent multiple DEV deployments from overwriting each other.
+concurrency:
+  group: boutique-frontend-dev
+  cancel-in-progress: true
+
+# GitHub only needs repository read access and OIDC permission for AWS.
 permissions:
   contents: read
   id-token: write
 
 env:
+  # AWS deployment configuration.
   AWS_REGION: us-east-1
   S3_BUCKET: boutique-dev-frontend
   CLOUDFRONT_DISTRIBUTION_ID: E3SF8B4MHWNVIT
   APP_DIR: react-app
 
-  # ============================================================
-  # FRONTEND APPLICATION
-  # ============================================================
-
+  # Basic frontend application configuration.
   VITE_APP_NAME: Boutique
   VITE_APP_ENV: dev
 
-  # ============================================================
-  # BACKEND API
-  #
-  # Every frontend API client uses the same public ALB hostname.
-  # Individual paths are added by the frontend API clients.
-  # ============================================================
-
+  # All frontend API requests go through the public Boutique API hostname.
   VITE_PRODUCT_API_URL: https://api.needystuff.in
   VITE_INVENTORY_API_URL: https://api.needystuff.in
   VITE_USER_API_URL: https://api.needystuff.in
@@ -39,69 +38,45 @@ env:
   VITE_CHECKOUT_API_URL: https://api.needystuff.in
   VITE_SHIPPING_API_URL: https://api.needystuff.in
 
-  # ============================================================
-  # API SETTINGS
-  # ============================================================
-
+  # Shared frontend API timeout.
   VITE_API_TIMEOUT_MS: "10000"
 
-  # ============================================================
-  # COMMERCE
-  # ============================================================
-
+  # Basic commerce configuration used by the frontend.
   VITE_DEFAULT_CURRENCY: USD
   VITE_DEMO_CARD_LAST4: "4242"
 
-  # ============================================================
-  # DEV AUTHENTICATION
-  #
-  # Current frontend uses local authentication.
-  # Later replace with Cognito.
-  # ============================================================
+  # Cognito is the authentication provider and values come from GitHub Repository Variables.
+  VITE_AUTH_MODE: cognito
+  VITE_COGNITO_REGION: ${{ vars.VITE_COGNITO_REGION }}
+  VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+  VITE_COGNITO_CLIENT_ID: ${{ vars.VITE_COGNITO_CLIENT_ID }}
+  VITE_COGNITO_DOMAIN: ${{ vars.VITE_COGNITO_DOMAIN }}
+  VITE_COGNITO_REDIRECT_URI: ${{ vars.VITE_COGNITO_REDIRECT_URI }}
+  VITE_COGNITO_LOGOUT_URI: ${{ vars.VITE_COGNITO_LOGOUT_URI }}
+  VITE_COGNITO_SCOPE: ${{ vars.VITE_COGNITO_SCOPE }}
 
-  VITE_AUTH_MODE: local
-  VITE_COGNITO_REGION: ""
-  VITE_COGNITO_USER_POOL_ID: ""
-  VITE_COGNITO_CLIENT_ID: ""
-
-  # ============================================================
-  # FEATURE FLAGS
-  # ============================================================
-
+  # Frontend feature switches.
   VITE_ENABLE_ADVERTISEMENTS: "true"
   VITE_ENABLE_RECOMMENDATIONS: "false"
   VITE_ENABLE_CURRENCY: "false"
   VITE_ENABLE_ASSISTANT: "false"
 
 jobs:
+
   deploy:
-    runs-on: self-hosted
+    name: Build and Deploy DEV
+    runs-on: ubuntu-latest
+
+    # Stop a stuck frontend deployment automatically.
+    timeout-minutes: 20
 
     steps:
-      # ========================================================
-      # CHECKOUT
-      # ========================================================
 
+      # Download the repository source code onto the GitHub runner.
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ========================================================
-      # RUNNER INFORMATION
-      # ========================================================
-
-      - name: Show runner information
-        run: |
-          echo "Runner name: $RUNNER_NAME"
-          echo "Runner OS: $RUNNER_OS"
-          echo "Runner arch: $RUNNER_ARCH"
-          hostname
-          whoami
-          pwd
-
-      # ========================================================
-      # NODE
-      # ========================================================
-
+      # Install Node.js and reuse the npm dependency cache between workflow runs.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -109,32 +84,21 @@ jobs:
           cache: npm
           cache-dependency-path: react-app/package-lock.json
 
-      # ========================================================
-      # DEPENDENCIES
-      # ========================================================
-
+      # Install exactly the dependency versions recorded in package-lock.json.
       - name: Install dependencies
-        working-directory: react-app
+        working-directory: ${{ env.APP_DIR }}
         run: npm ci
 
-      # ========================================================
-      # LINT
-      # ========================================================
-
+      # Catch frontend code and syntax problems before creating the deployment bundle.
       - name: Lint frontend
-        working-directory: react-app
+        working-directory: ${{ env.APP_DIR }}
         run: npm run lint
 
-      # ========================================================
-      # VERIFY REQUIRED VITE CONFIG BEFORE BUILD
-      #
-      # This prevents another successful workflow that generates
-      # a broken browser bundle.
-      # ========================================================
-
-      - name: Validate frontend build configuration
+      # Fail immediately if any required API or Cognito configuration is missing.
+      - name: Validate frontend configuration
+        shell: bash
         run: |
-          echo "Checking mandatory Vite variables..."
+          set -euo pipefail
 
           REQUIRED_VARS=(
             VITE_PRODUCT_API_URL
@@ -145,190 +109,153 @@ jobs:
             VITE_PAYMENT_API_URL
             VITE_CHECKOUT_API_URL
             VITE_SHIPPING_API_URL
+            VITE_COGNITO_REGION
+            VITE_COGNITO_USER_POOL_ID
+            VITE_COGNITO_CLIENT_ID
+            VITE_COGNITO_DOMAIN
+            VITE_COGNITO_REDIRECT_URI
+            VITE_COGNITO_LOGOUT_URI
+            VITE_COGNITO_SCOPE
           )
-
-          FAILED=0
 
           for VAR in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!VAR:-}" ]; then
-              echo "ERROR: $VAR is missing"
-              FAILED=1
-            else
-              echo "OK: $VAR"
+              echo "ERROR: Missing required variable: $VAR"
+              exit 1
             fi
           done
 
-          if [ "$FAILED" -ne 0 ]; then
-            echo "Frontend configuration validation failed."
-            exit 1
-          fi
+          echo "Frontend configuration validation passed."
 
-          echo "All required frontend API variables are configured."
-
-      # ========================================================
-      # BUILD
-      # ========================================================
-
-      - name: Build DEV frontend
-        working-directory: react-app
+      # Compile React/Vite source code and inject the VITE environment values into the browser bundle.
+      - name: Build frontend
+        working-directory: ${{ env.APP_DIR }}
         run: npm run build
 
-      # ========================================================
-      # VALIDATE BUILD
-      # ========================================================
-
-      - name: Validate DEV bundle
-        working-directory: react-app
+      # Verify that the generated bundle exists and contains API and Cognito configuration.
+      - name: Validate frontend bundle
+        working-directory: ${{ env.APP_DIR }}
+        shell: bash
         run: |
-          echo "Checking generated DEV frontend bundle..."
+          set -euo pipefail
 
           test -f dist/index.html
           test -d dist/assets
 
-          JS_FILE=$(find dist/assets -type f -name '*.js' | head -1)
-          CSS_FILE=$(find dist/assets -type f -name '*.css' | head -1)
-
-          test -n "$JS_FILE"
-          test -n "$CSS_FILE"
-
-          echo "JS bundle:  $JS_FILE"
-          echo "CSS bundle: $CSS_FILE"
-
-          if grep -R -E 'http://localhost:808[0-9]' dist/; then
-            echo "ERROR: localhost backend URL found in deployable DEV bundle."
+          if grep -R -qE 'http://localhost:808[0-9]' dist/; then
+            echo "ERROR: localhost backend URL found in frontend bundle."
             exit 1
           fi
 
-          if ! grep -R "api.needystuff.in" dist/ >/dev/null; then
-            echo "ERROR: DEV API hostname was not compiled into the bundle."
+          if ! grep -R -q "api.needystuff.in" dist/; then
+            echo "ERROR: Boutique API hostname is missing from frontend bundle."
             exit 1
           fi
 
-          echo "DEV frontend bundle validation passed."
+          if ! grep -R -q "amazoncognito.com" dist/; then
+            echo "ERROR: Cognito domain is missing from frontend bundle."
+            exit 1
+          fi
 
-      # ========================================================
-      # AWS AUTHENTICATION
-      # ========================================================
+          echo "Frontend bundle validation passed."
 
-      - name: Authenticate to AWS using OIDC
+      # Exchange the GitHub OIDC token for temporary AWS credentials without AWS access keys.
+      - name: Authenticate to AWS
         uses: aws-actions/configure-aws-credentials@v5
         with:
           role-to-assume: arn:aws:iam::663130434910:role/BoutiqueFrontendDeployRole
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Verify AWS identity
-        run: aws sts get-caller-identity
-
-      # ========================================================
-      # HASHED ASSETS
-      #
-      # Safe to cache for a long time because Vite changes the
-      # filename whenever the content changes.
-      # ========================================================
-
+      # Upload hashed Vite assets with long-term caching because their filenames change with content.
       - name: Upload hashed assets
-        working-directory: react-app
+        working-directory: ${{ env.APP_DIR }}
         run: |
           aws s3 sync dist/assets/ \
-            s3://${S3_BUCKET}/assets/ \
+            "s3://${S3_BUCKET}/assets/" \
             --delete \
-            --cache-control "public,max-age=31536000,immutable"
+            --cache-control "public,max-age=31536000,immutable" \
+            --only-show-errors
 
-      # ========================================================
-      # STATIC FILES
-      # ========================================================
-
+      # Upload remaining non-hashed frontend files separately from index.html.
       - name: Upload static files
-        working-directory: react-app
+        working-directory: ${{ env.APP_DIR }}
         run: |
           aws s3 sync dist/ \
-            s3://${S3_BUCKET}/ \
+            "s3://${S3_BUCKET}/" \
             --delete \
             --exclude "assets/*" \
-            --exclude "index.html"
+            --exclude "index.html" \
+            --cache-control "public,max-age=300" \
+            --only-show-errors
 
-      # ========================================================
-      # INDEX.HTML
-      #
-      # Never aggressively cache SPA index.html.
-      # ========================================================
-
-      - name: Upload index.html with no-cache
-        working-directory: react-app
+      # Upload index.html without browser caching so users receive the latest Vite bundle references.
+      - name: Upload index.html
+        working-directory: ${{ env.APP_DIR }}
         run: |
           aws s3 cp dist/index.html \
-            s3://${S3_BUCKET}/index.html \
+            "s3://${S3_BUCKET}/index.html" \
             --cache-control "no-cache,no-store,must-revalidate" \
-            --content-type "text/html"
+            --content-type "text/html" \
+            --only-show-errors
 
-      # ========================================================
-      # VERIFY S3 ARTIFACT
-      # ========================================================
-
-      - name: Verify deployed index.html
-        working-directory: react-app
-        run: |
-          LOCAL_JS=$(grep -oE 'assets/index-[^"]+\.js' dist/index.html | head -1)
-
-          REMOTE_JS=$(aws s3 cp s3://${S3_BUCKET}/index.html - \
-            | grep -oE 'assets/index-[^"]+\.js' \
-            | head -1)
-
-          echo "Local bundle:  $LOCAL_JS"
-          echo "Remote bundle: $REMOTE_JS"
-
-          test "$LOCAL_JS" = "$REMOTE_JS"
-
-      # ========================================================
-      # CLOUDFRONT
-      # ========================================================
-
+      # Clear CloudFront cache so the newly deployed frontend becomes available immediately.
       - name: Invalidate CloudFront
+        shell: bash
         run: |
+          set -euo pipefail
+
           INVALIDATION_ID=$(aws cloudfront create-invalidation \
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --paths "/*" \
             --query 'Invalidation.Id' \
             --output text)
 
-          echo "Invalidation ID: $INVALIDATION_ID"
-
           aws cloudfront wait invalidation-completed \
             --distribution-id "${CLOUDFRONT_DISTRIBUTION_ID}" \
             --id "${INVALIDATION_ID}"
 
-      # ========================================================
-      # PUBLIC WEBSITE VERIFICATION
-      # ========================================================
+          echo "CloudFront invalidation completed."
 
-      - name: Verify website
+      # Verify that the live website and its generated JavaScript bundle are reachable.
+      - name: Verify live website
+        shell: bash
         run: |
+          set -euo pipefail
+
           STATUS=$(curl \
-            -s \
-            -o /tmp/site.html \
-            -w "%{http_code}" \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 5 \
+            --output /tmp/site.html \
+            --write-out "%{http_code}" \
             https://needystuff.in/)
 
-          echo "HTTP status: $STATUS"
-
-          test "$STATUS" = "200"
+          if [ "$STATUS" != "200" ]; then
+            echo "ERROR: Website returned HTTP $STATUS"
+            exit 1
+          fi
 
           grep -q '<div id="root">' /tmp/site.html
 
           LIVE_JS=$(grep -oE '/assets/index-[^"]+\.js' /tmp/site.html | head -1)
 
-          echo "Live JavaScript bundle: $LIVE_JS"
-
-          test -n "$LIVE_JS"
+          if [ -z "$LIVE_JS" ]; then
+            echo "ERROR: JavaScript bundle reference not found."
+            exit 1
+          fi
 
           JS_STATUS=$(curl \
-            -s \
-            -o /dev/null \
-            -w "%{http_code}" \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --output /dev/null \
+            --write-out "%{http_code}" \
             "https://needystuff.in${LIVE_JS}")
 
-          echo "Live JavaScript HTTP status: $JS_STATUS"
+          if [ "$JS_STATUS" != "200" ]; then
+            echo "ERROR: JavaScript bundle returned HTTP $JS_STATUS"
+            exit 1
+          fi
 
-          test "$JS_STATUS" = "200"
-
-          echo "Boutique DEV frontend deployment successful."
+          echo "Boutique frontend deployed successfully."
