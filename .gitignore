@@ -172,3 +172,8 @@ github-sync-reports/
 .lambda-image-removal-backups/
 frontend-master-backup-*/
 *.backup-*
+id_rsa
+id_ed25519
+*credentials*
+*secret*.txt
+.automation-logs/
