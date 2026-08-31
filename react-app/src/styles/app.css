@@ -1930,3 +1930,108 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .product-card__details { align-items: flex-start; flex-direction: column; gap: 8px; }
   .product-details__button { width: 100%; }
 }
+
+/* BOUTIQUE-DEMO-PAYMENT-CONFIRMATION-BEGIN */
+.confirmation-hero {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.confirmation-products {
+  max-width: 780px;
+  margin: 20px auto;
+  padding: 22px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  text-align: left;
+}
+
+.confirmation-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.confirmation-section-title svg {
+  color: var(--brand);
+}
+
+.confirmation-section-title span {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.confirmation-section-title h2 {
+  margin: 3px 0 0;
+}
+
+.confirmation-product-list {
+  display: grid;
+  gap: 0;
+}
+
+.confirmation-product-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.confirmation-product-row > div {
+  display: grid;
+  gap: 5px;
+}
+
+.confirmation-product-row span,
+.confirmation-products-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.confirmation-grand-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  background: #f8f4f6;
+  border-radius: 14px;
+}
+
+.confirmation-grand-total strong {
+  font-size: 1.25rem;
+}
+
+.confirmation-actions .primary-button,
+.confirmation-actions .secondary-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.payment-options small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 640px) {
+  .confirmation-products {
+    padding: 16px;
+  }
+
+  .confirmation-product-row,
+  .confirmation-grand-total {
+    align-items: flex-start;
+  }
+}
+/* BOUTIQUE-DEMO-PAYMENT-CONFIRMATION-END */
